@@ -55,6 +55,7 @@ PATCHES = [
     ("app.js",
      "'⚠ 脱敏报告与映射表含原文，仅保存在本地「' + (s.report_dir || '').split(/[\\\\/]/).slice(-1)[0] + '」，切勿随文档外发'",
      "'⚠ 脱敏报告与映射表含原文，只在本页内存中，刷新即清除；下载后请妥善保管，切勿随文档外发'", 1),
+    ("app.js", "'已保存至原文件旁「脱敏输出」文件夹'", "'点击下方按钮下载到本机'", 1),
     ("app.js", "toast('初始化失败，请确认后台服务已启动');", "toast('脱敏引擎加载失败，请刷新页面重试');", 1),
     ("index.html", '<link rel="stylesheet" href="app.css">', '<link rel="stylesheet" href="/app.css?v=__V__">\n<meta name="description" content="文隐 TextVeil：Word / Excel / PPT / Markdown 文档信息脱敏，在浏览器本地处理，文件不上传。">', 1),
     ("index.html", '<link rel="icon" href="favicon.svg" type="image/svg+xml">', '<link rel="icon" href="/favicon.svg" type="image/svg+xml">\n<link rel="apple-touch-icon" href="/icon.png">', 1),
