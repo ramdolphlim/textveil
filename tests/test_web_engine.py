@@ -32,7 +32,8 @@ def call(n, *a):
     return r["result"]
 
 st = call("get_state")
-assert st["web"] and st["env"]["all_ready"] and not st["env"]["engines"]["pdf"]
+# 浏览器里没有 PyMuPDF；CI 上可能装了，所以这里不检查 pdf 引擎
+assert st["web"] and st["env"]["all_ready"], st["env"]
 src = sorted(p for p in glob.glob(os.path.join(samples, "*")) if not p.endswith(".pdf"))
 assert len(src) == 4, src
 paths = json.loads(W.new_upload_dir(json.dumps(["文件夹/" + os.path.basename(p) for p in src])))
