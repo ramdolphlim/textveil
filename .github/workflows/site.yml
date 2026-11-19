@@ -1,0 +1,24 @@
+# 推送到 main 时构建网页版并发布到 site 分支；textveil.limch.cc 的 Cloudflare Worker 从 site 分支取文件
+name: site
+on:
+  push:
+    branches: [main]
+    paths: ['web/**', 'desktop/ui/**', 'desktop/textveil_desktop.py', 'textveil/**', 'assets/logo/**', '.github/workflows/site.yml']
+  workflow_dispatch: {}
+permissions:
+  contents: write
+concurrency: { group: site, cancel-in-progress: false }
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install python-docx openpyxl python-pptx lxml pillow
+      - name: 构建网页版
+        run: python web/build_web.py
+      - name: 测试网页版引擎
+        run: python tests/test_web_engine.py
+      - name: 发布到 site 分支
+        run: bash web/publish_site.sh

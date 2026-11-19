@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>文隐 TextVeil</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="top pywebview-drag-region">
+  <div class="top-left">
+    <button type="button" class="ghost" id="b-back" hidden>‹ 返回</button>
+    <span class="brand-mini" id="brand-mini">TextVeil</span>
+  </div>
+  <nav class="seg" id="nav-seg" aria-label="功能切换">
+    <button type="button" data-nav="drop" aria-pressed="true">脱敏</button>
+    <button type="button" data-nav="restore" aria-pressed="false">还原</button>
+  </nav>
+  <div class="top-right">
+    <button type="button" class="iconbtn" id="b-theme" aria-label="切换明暗主题"></button>
+  </div>
+</header>
+
+<main>
+  <!-- ① 拖入文档 -->
+  <section class="view center" id="v-drop">
+    <button type="button" class="ring" id="b-ring" aria-label="选择文档">
+      <svg viewBox="0 0 128 128" aria-hidden="true">
+        <rect class="mk-sheet" x="20" y="16" width="74" height="92" rx="13" stroke-width="7"></rect>
+        <path class="mk-lines" d="M36 42h38M36 58h24M36 74h18" stroke-width="6" stroke-linecap="round"></path>
+        <path class="mk-veil" d="M84 56l26 10v21c0 15-11 25-26 31-15-6-26-16-26-31V66l26-10z"></path>
+        <path class="mk-check" d="M74 86l7 7 15-15" fill="none" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"></path>
+      </svg>
+    </button>
+    <div class="stack">
+      <h1>把文档拖进来</h1>
+      <p class="lead">本地离线处理，不联网、不上传 · 仅留存在这台电脑上</p>
+      <div class="fmt-pills" aria-label="支持格式">
+        <span>DOCX</span><span>XLSX</span><span>PPTX</span><span>PDF</span><span>MD</span>
+      </div>
+    </div>
+    <div class="mode-switch" id="drop-mode" role="group" aria-label="脱敏模式">
+      <button type="button" data-mode="placeholder" aria-pressed="true">可逆占位符 <small>[姓名_01]</small></button>
+      <button type="button" data-mode="mask" aria-pressed="false">掩码遮蔽 <small>138****5678</small></button>
+    </div>
+    <div class="stack">
+      <div class="actions-row">
+        <button type="button" class="pill" id="b-pick">选择文档</button>
+        <button type="button" class="btn-outline" id="b-pickdir">选择文件夹</button>
+      </div>
+    </div>
+    <input type="file" id="f-upload" multiple accept=".docx,.xlsx,.xlsm,.pptx,.pdf,.md,.markdown,.txt" hidden>
+  </section>
+
+  <!-- 处理中 -->
+  <section class="view center" id="v-busy" hidden>
+    <div class="spin">
+      <svg viewBox="0 0 128 128" aria-hidden="true">
+        <rect class="mk-sheet" x="20" y="16" width="74" height="92" rx="13" stroke-width="7"></rect>
+        <path class="mk-veil" d="M84 56l26 10v21c0 15-11 25-26 31-15-6-26-16-26-31V66l26-10z"></path>
+      </svg>
+    </div>
+    <div class="stack">
+      <h1 id="busy-title">正在扫描</h1>
+      <div class="busyline" id="busy-line" aria-live="polite"></div>
+    </div>
+  </section>
+
+  <!-- ② 扫描结果汇总 -->
+  <section class="view scan" id="v-scan" hidden>
+    <div class="stack">
+      <div class="big" id="sc-total">0</div>
+      <div class="sc-sub" id="sc-sub"></div>
+      <div class="muted mono" style="font-size:12px" id="sc-meta"></div>
+    </div>
+    <div class="mode-switch" id="scan-mode" role="group" aria-label="切换脱敏策略">
+      <button type="button" data-mode="placeholder" aria-pressed="true">可逆占位符 <small>支持还原</small></button>
+      <button type="button" data-mode="mask" aria-pressed="false">掩码遮蔽 <small>不可逆</small></button>
+    </div>
+    <div class="bars" id="sc-bars"></div>
+    <p class="warnline" id="sc-warn" hidden></p>
+    <div class="stack">
+      <button type="button" class="pill accent" id="b-apply">脱敏</button>
+      <button type="button" class="link" id="b-review">逐项核对与修改</button>
+    </div>
+  </section>
+
+  <!-- ③ 逐项核对 -->
+  <section class="view review" id="v-review" hidden>
+    <div class="rvhead">
+      <div>
+        <h1 id="rv-title">核对</h1>
+        <p>取消勾选即保留原文；可直接修改右侧替换值，支持实时切换策略</p>
+      </div>
+      <div class="rv-tools">
+        <div class="mode-switch compact" id="rv-mode" role="group" aria-label="策略切换">
+          <button type="button" data-mode="placeholder" aria-pressed="true">占位符</button>
+          <button type="button" data-mode="mask" aria-pressed="false">掩码</button>
+        </div>
+        <button type="button" class="btn" id="b-addkw">+ 补充敏感词</button>
+        <label class="search">
+          <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><circle cx="6" cy="6" r="4.5" fill="none" stroke="currentColor" stroke-width="1.4"></circle><path d="M9.5 9.5 L13 13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"></path></svg>
+          <input type="search" id="rv-q" placeholder="搜索敏感词" aria-label="搜索敏感词">
+        </label>
+      </div>
+    </div>
+    <nav class="tabs" id="rv-tabs" aria-label="按类别筛选"></nav>
+    <div class="list" id="rv-list"></div>
+    <div class="rvfoot">
+      <span class="muted mono" style="font-size:12px" id="rv-sum"></span>
+      <button type="button" class="pill accent" id="b-apply2">脱敏</button>
+    </div>
+  </section>
+
+  <!-- ④ 完成与校验 -->
+  <section class="view done" id="v-done" hidden>
+    <span id="dn-icon"></span>
+    <div class="stack">
+      <h1 id="dn-title"></h1>
+      <p class="lead" id="dn-sub" style="font-size:14px"></p>
+    </div>
+    <div class="checks" id="dn-checks"></div>
+    <ul class="issues" id="dn-issues" hidden></ul>
+    <div class="stack">
+      <div class="actions-row">
+        <button type="button" class="pill" id="b-show">在访达中显示</button>
+        <button type="button" class="pill accent" id="b-download" hidden>下载脱敏文档</button>
+      </div>
+      <div class="links">
+        <button type="button" class="link" id="b-report">查看脱敏报告</button>
+        <button type="button" class="link" id="b-dlmap">导出映射表</button>
+        <button type="button" class="link" id="b-gorestore">去还原页面</button>
+        <button type="button" class="link" id="b-again">再处理一批</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ⑤ 可逆还原 -->
+  <section class="view restore" id="v-restore" hidden>
+    <div class="rs-head">
+      <h1>文档逆向还原</h1>
+      <p class="lead">将可逆占位符（如 <span class="mono">[姓名_01]</span>）脱敏后的文档，按本地映射表恢复原文</p>
+    </div>
+    <div class="rs-grid">
+      <div class="rs-card" id="rs-dropzone">
+        <div class="rs-label">1. 选择脱敏后文档（支持拖拽）</div>
+        <div class="rs-files muted" id="rs-files">尚未选择文档</div>
+        <div class="actions-row" style="margin-top:auto">
+          <button type="button" class="btn" id="rs-pick">选择文档…</button>
+        </div>
+        <input type="file" id="rs-upload" multiple accept=".docx,.xlsx,.xlsm,.pptx,.pdf,.md,.markdown,.txt" hidden>
+      </div>
+      <div class="rs-card">
+        <div class="rs-label">2. 选择对应的映射表</div>
+        <select id="rs-batch-sel" class="field"></select>
+        <div class="rs-or">或手动导入 <span class="mono">映射表.json</span></div>
+        <div class="rs-files muted" id="rs-mapname">默认使用所选批次记录</div>
+        <div class="actions-row" style="margin-top:auto">
+          <button type="button" class="btn" id="rs-pickmap">选择 JSON 文件…</button>
+        </div>
+        <input type="file" id="rs-mapupload" accept=".json" hidden>
+      </div>
+    </div>
+    <div class="rs-preview" id="rs-preview" hidden></div>
+    <div class="rs-done" id="rs-done" hidden></div>
+    <div class="stack">
+      <div class="actions-row">
+        <button type="button" class="pill accent" id="rs-run" disabled>还原文档</button>
+        <button type="button" class="pill" id="rs-show" hidden>在访达中显示</button>
+        <button type="button" class="pill" id="rs-dl" hidden>下载还原文档</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 设置 -->
+  <section class="view settings" id="v-set" hidden></section>
+</main>
+
+<footer class="foot" id="foot"></footer>
+<button type="button" class="iconbtn gear" id="b-gear" aria-label="设置" title="设置">
+  <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
+    <path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" d="M10.3 2.6h3.4l.5 2.6a7.4 7.4 0 0 1 1.9 1.1l2.5-.9 1.7 2.9-2 1.7a7.6 7.6 0 0 1 0 2.2l2 1.7-1.7 2.9-2.5-.9a7.4 7.4 0 0 1-1.9 1.1l-.5 2.6h-3.4l-.5-2.6a7.4 7.4 0 0 1-1.9-1.1l-2.5.9-1.7-2.9 2-1.7a7.6 7.6 0 0 1 0-2.2l-2-1.7 1.7-2.9 2.5.9a7.4 7.4 0 0 1 1.9-1.1z"></path>
+    <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.6"></circle>
+  </svg>
+</button>
+<div class="toast" id="toast" role="status" hidden></div>
+<div class="modal" id="modal" hidden>
+  <div class="box" role="dialog" aria-modal="true" aria-labelledby="md-title">
+    <h3 id="md-title"></h3>
+    <p id="md-text"></p>
+    <input class="field" id="md-input" hidden>
+    <div class="btns">
+      <button type="button" class="btn" id="md-cancel">取消</button>
+      <button type="button" class="pill" style="height:34px;padding:0 18px;font-size:13px" id="md-ok">确定</button>
+    </div>
+  </div>
+</div>
+<script src="app.js"></script>
+</body>
+</html>

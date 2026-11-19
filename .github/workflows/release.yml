@@ -1,0 +1,129 @@
+# 推送 v* 标签（例如 v1.0.0）时，打包 Mac 和 Windows 安装包并发布到 Releases
+name: release
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '给已有版本补打包，例如 v1.0.0（留空只打包不发布）'
+        required: false
+permissions:
+  contents: write
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install python-docx openpyxl python-pptx pymupdf lxml pillow
+      - run: python tests/run_tests.py
+
+  mac:
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-15, arch: arm64 }
+          - { os: macos-15-intel, arch: intel }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - name: 版本号
+        run: |
+          T="${{ inputs.tag }}"; [ -n "$T" ] || { [ "$GITHUB_REF_TYPE" = tag ] && T="$GITHUB_REF_NAME"; } || true
+          if [ -n "$T" ]; then V="${T#v}"; else V="0.0.0"; fi
+          echo "V=$V" >> "$GITHUB_ENV"
+      - run: pip install -r desktop/requirements.txt
+      - name: 打包 .app 和 .dmg
+        working-directory: desktop
+        run: |
+          sed -i '' "s/^APP_VERSION = \".*\"/APP_VERSION = \"$V\"/" ../textveil/__init__.py
+          pyinstaller --noconfirm --windowed --name "文隐" --icon assets/icon.icns \
+            --osx-bundle-identifier cc.limch.textveil \
+            --add-data "ui:ui" --paths .. --collect-submodules textveil textveil_desktop.py
+          PL="dist/文隐.app/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $V" "$PL" || /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string $V" "$PL"
+          /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string 文隐 TextVeil" "$PL" || true
+          /usr/libexec/PlistBuddy -c "Add :NSHighResolutionCapable bool true" "$PL" || true
+          codesign --force --deep --sign - "dist/文隐.app"
+          mkdir -p dmg && cp -R "dist/文隐.app" dmg/ && ln -s /Applications dmg/Applications
+          hdiutil create -volname "TextVeil" -srcfolder dmg -ov -format UDZO "TextVeil-$V-mac-${{ matrix.arch }}.dmg"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mac-${{ matrix.arch }}
+          path: desktop/TextVeil-*.dmg
+
+  windows:
+    needs: test
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - name: 版本号
+        run: |
+          T="${{ inputs.tag }}"; [ -n "$T" ] || { [ "$GITHUB_REF_TYPE" = tag ] && T="$GITHUB_REF_NAME"; } || true
+          if [ -n "$T" ]; then V="${T#v}"; else V="0.0.0"; fi
+          echo "V=$V" >> "$GITHUB_ENV"
+      - run: pip install -r desktop/requirements.txt
+      - name: 打包 .exe
+        working-directory: desktop
+        run: |
+          N="${V%%-*}"; IFS=. read -r A B C <<< "$N"
+          sed -i "s/^APP_VERSION = \".*\"/APP_VERSION = \"$V\"/" ../textveil/__init__.py
+          sed -i "s/1\.0\.0/$V/g; s/(1,0,0,0)/(${A:-0},${B:-0},${C:-0},0)/g" version_info.txt
+          sed -i "s/^AppVersion=.*/AppVersion=$V/" installer.iss
+          pyinstaller --noconfirm --windowed --name TextVeil --icon assets/icon.ico \
+            --add-data "ui;ui" --paths .. --collect-submodules textveil --version-file version_info.txt textveil_desktop.py
+          7z a "TextVeil-$V-win-x64-portable.zip" ./dist/TextVeil/*
+      - name: 生成安装程序
+        working-directory: desktop
+        shell: pwsh
+        run: |
+          choco install innosetup -y --no-progress
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /Q "/FTextVeil-$env:V-win-x64-setup" "/O." installer.iss
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: |
+            desktop/TextVeil-*-win-x64-setup.exe
+            desktop/TextVeil-*-win-x64-portable.zip
+
+  release:
+    needs: [mac, windows]
+    if: always() && (startsWith(github.ref, 'refs/tags/') || inputs.tag != '') && needs.windows.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+      - run: ls -la out
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          name: 文隐 TextVeil ${{ inputs.tag || github.ref_name }}
+          files: out/*
+          generate_release_notes: true
+          body: |
+            ## 下载
+
+            | 系统 | 文件 |
+            |---|---|
+            | macOS（Apple 芯片） | `TextVeil-*-mac-arm64.dmg` |
+            | macOS（Intel 芯片） | `TextVeil-*-mac-intel.dmg` |
+            | Windows 10 / 11 | `TextVeil-*-win-x64-setup.exe`（安装版）或 `*-portable.zip`（免安装） |
+
+            程序没有开发者签名，第一次打开：macOS 在「应用程序」里右键「文隐」→ 打开（提示“已损坏”就在终端执行 `xattr -cr /Applications/文隐.app`）；Windows 点“更多信息”→“仍要运行”。
+
+            桌面版支持 Word / Excel / PPT / PDF / Markdown；不想安装也可以用网页版（不含 PDF）：<https://textveil.limch.cc>
+
+            安装包内含 PyMuPDF（AGPL-3.0）用于处理 PDF，完整源代码即本仓库。

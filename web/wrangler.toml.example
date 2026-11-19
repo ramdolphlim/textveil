@@ -1,0 +1,8 @@
+# 复制为 wrangler.toml 后运行 npx wrangler deploy（只有修改了 src/worker.js 才需要）
+name = "textveil"
+main = "src/worker.js"
+compatibility_date = "2025-01-01"
+workers_dev = false
+
+# 绑定自己的域名（需要该域名托管在 Cloudflare）
+routes = [{ pattern = "textveil.limch.cc", custom_domain = true }]

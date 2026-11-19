@@ -1,0 +1,20 @@
+__pycache__/
+*.pyc
+.venv/
+.DS_Store
+*.spec
+desktop/build/
+desktop/dist/
+desktop/dmg/
+web/dist/
+web/wrangler.toml
+.wrangler/
+node_modules/
+# 本地生成的文档和报告（含原文，别提交）
+样例文档/
+脱敏输出/
+还原输出/
+已脱敏/
+*报告*/
+映射表*.json
+映射表*.csv
