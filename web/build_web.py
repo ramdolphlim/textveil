@@ -61,12 +61,12 @@ PATCHES = [
     ("index.html", '<link rel="icon" href="favicon.svg" type="image/svg+xml">', '<link rel="icon" href="/favicon.svg" type="image/svg+xml">\n<link rel="apple-touch-icon" href="/icon.png">', 1),
     ("index.html", '<script src="app.js"></script>', '<script src="/tvweb.js?v=__V__"></script>\n<script src="/app.js?v=__V__"></script>', 1),
     ("index.html", '<p class="lead">本地离线处理，不联网、不上传 · 仅留存在这台电脑上</p>',
-     '<p class="lead">在浏览器本地处理，文档不上传 · PDF 请用 <a href="https://github.com/peter804762649-ux/textveil/releases/latest" target="_blank" rel="noopener">桌面版</a></p>', 1),
+     '<p class="lead">在浏览器本地处理，文档不上传 · PDF 请用 <a href="https://github.com/ramdolphlim/textveil/releases/latest" target="_blank" rel="noopener">桌面版</a></p>', 1),
     ("index.html", "<span>PDF</span>", "", 1),
     ("index.html", 'accept=".docx,.xlsx,.xlsm,.pptx,.pdf,.md,.markdown,.txt"', 'accept=".docx,.xlsx,.xlsm,.pptx,.md,.markdown,.txt"', 2),
     ("index.html", '<input type="file" id="f-upload"', '<input type="file" id="f-dir" webkitdirectory multiple hidden>\n    <input type="file" id="f-upload"', 1),
     ("index.html", '<footer class="foot" id="foot"></footer>',
-     '<footer class="foot" id="foot"></footer>\n<a class="tv-gh" href="https://github.com/peter804762649-ux/textveil" target="_blank" rel="noopener">开源 · GitHub</a>', 1),
+     '<footer class="foot" id="foot"></footer>\n<a class="tv-gh" href="https://github.com/ramdolphlim/textveil" target="_blank" rel="noopener">开源 · GitHub</a>', 1),
 ]
 
 WEB_CSS = """

@@ -1,6 +1,6 @@
 MIT License
 
-Copyright (c) 2026 peter804762649-ux
+Copyright (c) 2026 ramdolphlim
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -28,4 +28,4 @@ libraries under their own licenses, notably PyMuPDF / MuPDF (AGPL-3.0,
 https://www.gnu.org/licenses/agpl-3.0.html), pywebview (BSD-3-Clause),
 python-docx / python-pptx / openpyxl / lxml (MIT / BSD). The complete
 corresponding source code of this program, including build scripts, is
-published at https://github.com/peter804762649-ux/textveil .
+published at https://github.com/ramdolphlim/textveil .

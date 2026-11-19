@@ -1,7 +1,7 @@
 /* 文隐 TextVeil · 网页版桥接层：把界面的 /api/... 请求转给浏览器后台线程里的脱敏引擎，文档不离开本机 */
 (function () {
   'use strict';
-  const DESKTOP = 'https://github.com/peter804762649-ux/textveil/releases/latest';
+  const DESKTOP = 'https://github.com/ramdolphlim/textveil/releases/latest';
   const worker = new Worker('/pyworker.js?v=__V__');
   const pend = new Map();
   let seq = 0;

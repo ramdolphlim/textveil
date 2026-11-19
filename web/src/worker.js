@@ -1,7 +1,7 @@
 // 文隐 TextVeil · Cloudflare Worker（textveil.limch.cc）
 // 只提供静态页面：文件来自 GitHub 仓库的 site 分支（由 GitHub Actions 自动构建发布），经 Cloudflare 缓存后从本域名返回。
 // 文档处理全部在用户浏览器里完成，这个 Worker 收不到、也不转发任何文档。
-const ORIGIN = 'https://raw.githubusercontent.com/peter804762649-ux/textveil/site/';
+const ORIGIN = 'https://raw.githubusercontent.com/ramdolphlim/textveil/site/';
 const T = {
   html: 'text/html; charset=utf-8', js: 'text/javascript; charset=utf-8', css: 'text/css; charset=utf-8',
   svg: 'image/svg+xml', png: 'image/png', zip: 'application/zip', txt: 'text/plain; charset=utf-8'

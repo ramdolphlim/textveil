@@ -6,8 +6,8 @@
 
 <p align="center">
   <a href="https://textveil.limch.cc"><b>在线使用</b></a> ·
-  <a href="https://github.com/peter804762649-ux/textveil/releases/latest"><b>下载桌面版（Mac / Windows）</b></a> ·
-  <a href="https://github.com/peter804762649-ux/drawveil">姊妹工具：图隐 DrawVeil（CAD 图纸脱敏）</a>
+  <a href="https://github.com/ramdolphlim/textveil/releases/latest"><b>下载桌面版（Mac / Windows）</b></a> ·
+  <a href="https://github.com/ramdolphlim/drawveil">姊妹工具：图隐 DrawVeil（CAD 图纸脱敏）</a>
 </p>
 
 ---
@@ -42,7 +42,7 @@
 
 ## 下载桌面版
 
-到 [Releases](https://github.com/peter804762649-ux/textveil/releases/latest) 下载：
+到 [Releases](https://github.com/ramdolphlim/textveil/releases/latest) 下载：
 
 | 系统 | 文件 |
 |---|---|
