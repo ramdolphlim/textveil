@@ -2,8 +2,8 @@
 
 import re
 from lxml import etree
-from ..detectors import Detector, Findings, name_like
-from ..masking import active_replace_map, mapping_regex
+from ..detectors import Detector, Findings, classify_header, name_like
+from ..masking import active_replace_map, mapping_regex, term_present
 from . import ooxml_utils as ox
 
 _WORD_TEXT_PARTS_RE = re.compile(
@@ -33,17 +33,23 @@ def _scan_table(rows: list[list[str]], det: Detector, findings: Findings, fname:
     if not rows:
         return
     headers = rows[0] if len(rows) >= 2 else []
+    # 首行是不是真正的表头：3 列以上的表格，或两列表格的第二格本身像列名；
+    # 否则多半是 | 联系人 | 张伟 | 这类键值表，首行也是数据
+    real_header = bool(headers) and (len(headers) >= 3 or classify_header(headers[-1]) is not None)
     for r_idx, row in enumerate(rows):
         for c_idx, cell in enumerate(row):
             if not cell.strip():
                 continue
             # 1) 按首行表头匹配
+            col_cat = None
             if headers and r_idx > 0 and c_idx < len(headers):
+                col_cat = classify_header(headers[c_idx])
                 for term, cat, rule, crep in det.detect_table_cell(headers[c_idx], cell):
                     findings.add(term, cat, rule, fname, sample=cell, custom_replace=crep)
-            # 2) 按左侧相邻标签单元格匹配（键值对表格常见，如 | 联系人 | 张伟 |）
-            if c_idx > 0 and len(row[c_idx - 1].strip()) <= 16:
-                for term, cat, rule, crep in det.detect_table_cell(row[c_idx - 1], cell):
+            # 2) 按左侧相邻标签单元格匹配（键值对表格常见，如 | 联系人 | 张伟 |）；
+            #    表头行、以及列头已经说明了含义的列不再用左侧单元格猜
+            if c_idx > 0 and not (real_header and (r_idx == 0 or col_cat)):
+                for term, cat, rule, crep in det.detect_kv_cell(row[c_idx - 1], cell):
                     findings.add(term, cat, rule, fname, sample=cell, custom_replace=crep)
 
 
@@ -114,7 +120,13 @@ def scan_file(path: str, det: Detector, findings: Findings, fname: str) -> dict:
         revision_count += sum(1 for _ in root.iter(ox.W_DEL)) + sum(1 for _ in root.iter(ox.W_INS))
 
         # 普通段落 (<w:p>)
-        for p_text in ox.extract_paragraph_texts(data, ox.W_P, ox.W_T):
+        p_texts = ox.extract_paragraph_texts(data, ox.W_P, ox.W_T)
+        if name == "word/document.xml":
+            # 封面 / 标题里的项目名称（前几段非空文字）
+            cover = [t for t in p_texts if t.strip()][:8]
+            for term, cat, rule, crep in det.detect_cover_lines(cover):
+                findings.add(term, cat, rule, fname, sample=term, custom_replace=crep)
+        for p_text in p_texts:
             all_body_texts.append(p_text)
             for term, cat, rule, crep in det.detect_text(p_text):
                 findings.add(term, cat, rule, fname, sample=p_text, custom_replace=crep)
@@ -262,7 +274,7 @@ def verify_file(src_path: str, out_path: str, check_terms: list[str]) -> dict:
         return {"structure_ok": False, "structure_msg": f"python-docx 打开验证失败：{e}", "residual": []}
 
     full_text = ox.collect_all_xml_text(out_entries, include_rels=True)
-    residual = [t for t in check_terms if t and t in full_text]
+    residual = [t for t in check_terms if term_present(t, full_text)]
     return {
         "structure_ok": True,
         "structure_msg": f"XML 结构完整（段落 {src_paras} → {out_paras}）",

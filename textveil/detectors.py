@@ -347,7 +347,7 @@ _RE_EN_COMPANY = re.compile(
 
 _CN_COMPANY_PREFIX_NOISE = re.compile(
     r"^(?:.*?(?:本协议由|本系统由|本项目由|本合同由|本方案由|委托方为|受托方为|甲方为|乙方为|建设单位为|"
-    r"请[^\s，。；：]{1,4}核对|由|与|和|及|跟|同|被|将|把|经|对|在|到|从|自|至|关于|委托|授权|"
+    r"请[^\s，。；：]{1,4}核对|由|与|和|及|跟|同|被|将|把|经|对|在|到|从|自|至|为|关于|委托|授权|"
     r"甲方|乙方|丙方|丁方|建设单位|设计单位|施工单位|监理单位|服务商|供应商|承建方|采购方|"
     r"开户行|收款方|付款方|签署|签订|核对|确认|公司名称|单位名称|企业名称|名称|是|系|[:：\s、，。；()])+)"
 )
@@ -392,7 +392,7 @@ _HEADER_CATS = [
     (re.compile(r"统一社会信用|信用代码|税号|uscc", re.I), "uscc"),
     (re.compile(r"地址|住址|address|location", re.I), "address"),
     (re.compile(r"项目|工程|合同号|合同编号|project|contract", re.I), "project"),
-    (re.compile(r"金额|报价|总价|单价|薪资|工资|奖金|预算|amount|price|salary", re.I), "amount"),
+    (re.compile(r"金额|报价|总价|单价|薪资|工资|奖金|预算|[（(]万?元[）)]|进度款|增减额|审定额|核减额|价款|造价|结算价|费用|税额|amount|price|salary", re.I), "amount"),
     (re.compile(r"密码|口令|密钥|token|secret|api.?key|password|pwd", re.I), "api_key"),
     (re.compile(r"\bip\b|ip地址|主机地址|服务器", re.I), "ip"),
 ]
@@ -404,6 +404,8 @@ def classify_header(header: str):
         return None
     for pat, cat in _HEADER_CATS:
         if pat.search(h):
+            if cat == "amount" and _RE_RATIO_HEADER.search(h):
+                return None  # 「累计占合同价比率」「增减率」这类是百分比，不是金额
             return cat
     return None
 
@@ -422,6 +424,152 @@ def _clean_cn_company(s: str) -> str:
     return s
 
 
+_RE_RATIO_HEADER = re.compile(r"率|比例|占比|百分|%|％")
+
+# 正文里「数字 + 元」形式的金额（带千分位，或不少于 4 位整数），只取数字部分，便于和表格里的同一金额共用代号
+_RE_AMOUNT_YUAN = re.compile(r"(?<![\d.,，])([-−]?\d{1,3}(?:,\d{3})+(?:\.\d{1,4})?|[-−]?\d{4,}(?:\.\d{1,4})?)(?=\s*元)")
+
+# 「XXX（以下简称“YYY”）」：XXX 是被定义的名称（项目 / 单位），YYY 是它的简称
+_RE_ALIAS_DEF = re.compile(
+    r"([^\s，。；;：:、,“”\"《》〈〉（）()\[\]【】]{2,60})\s*[（(]\s*(?:以下|下文|下称|以下均)?\s*(?:简称|称为|称)\s*[：:]?\s*"
+    r"[“\"「『‘]?([^”\"」』’）),，、\s]{1,20}?)[”\"」』’]?\s*[）)]"
+)
+_ALIAS_GENERIC = {
+    "项目", "工程", "本项目", "该项目", "本工程", "该工程", "合同", "本合同", "协议", "本协议", "公司", "本公司", "集团",
+    "甲方", "乙方", "丙方", "丁方", "发包人", "承包人", "发包方", "承包方", "业主", "建设单位", "委托人", "受托人",
+    "委托方", "受托方", "咨询人", "监理人", "设计人", "招标人", "投标人", "中标人", "采购人", "供应商", "我方", "对方",
+}
+_RE_NAME_PREFIX_NOISE = re.compile(
+    r"^(?:[^一-鿿A-Za-z]+|自[^对就为在]{0,12}?起|我公司|本公司|我单位|贵单位|贵公司|贵方|接受|委托|"
+    r"针对|关于|对于|对|就|为|在|由|受|向|将|把|是|系|即|经|按|根据|依据|承接|承建|负责|参与|完成|开展|做好|实施)+"
+)
+_RE_PROJECT_END = re.compile(r"(?:项目|工程|标段|[一二三四五六七八九十\d]期)$")
+_RE_COMPANY_END = re.compile(r"(?:有限责任公司|股份有限公司|有限公司|分公司|集团|研究院|设计院|事务所|公司)$")
+
+# 只由这些「通用专业 / 工程类别」词组成的名称不算具体项目（如「土建总包工程」「市政及景观工程」）
+_RE_GENERIC_ENG = re.compile(
+    r"总承包|总包|土建|安装|市政|景观|幕墙|门窗|泛光|照明|给排水|给水|排水|电气|暖通|空调|通风|消防|智能化|弱电|强电|机电|"
+    r"装饰|装修|精装|绿化|园林|钢结构|结构|桩基|基坑|支护|土方|室外|室内|道路|管网|人防|建筑|主体|附属|配套|专业|分包|劳务|"
+    r"材料|设备|工程|项目|改造|新建|扩建|维修|修缮|零星|临时|设施|系统|其他|其它|单位|分部|分项|子|含|及|和|与|等|"
+    r"第?[一二三四五六七八九十\d]+(?:标段|期)|标段|[、（）()\s\d#\-·.]"
+)
+_RE_HEADING_ENUM = re.compile(r"^(?:[（(][一二三四五六七八九十\d]{1,3}[）)]|[一二三四五六七八九十]{1,3}、|\d+(?:\.\d+)*[、.．\s]|第[一二三四五六七八九十\d]+[章节条])")
+_RE_TITLE_TAIL = re.compile(
+    r"(?=跟踪审计|全过程|竣工|结算|预算|概算|估算|招标|投标|施工|造价|审核|审计|咨询|可行性|设计|监理|总结|报告|方案|合同|"
+    r"技术|实施|建议书|进度|周报|月报|例会|会议纪要|工程量|清单|评估|验收|计划)"
+)
+
+
+def project_specific(name: str) -> bool:
+    """去掉通用专业词后还剩专有名称（地名、单位名、楼盘名等）才算具体项目。"""
+    return len(_RE_GENERIC_ENG.sub("", name or "")) >= 2
+
+
+def _clean_name_prefix(s: str) -> str:
+    prev = None
+    while prev != s:
+        prev = s
+        s = _RE_NAME_PREFIX_NOISE.sub("", s).strip()
+    return s
+
+
+# 由公司全称推断常用简称（如 杭州云帆康养管理有限公司 → 云帆），用于识别「云帆086」这类编号和简称
+_RE_REGION_PREFIX = re.compile(
+    r"^(?:中国|中华|"
+    r"北京|天津|上海|重庆|河北|山西|辽宁|吉林|黑龙江|江苏|浙江|安徽|福建|江西|山东|河南|湖北|湖南|广东|海南|四川|贵州|云南|"
+    r"陕西|甘肃|青海|台湾|内蒙古|广西|西藏|宁夏|新疆|香港|澳门|"
+    r"杭州|宁波|温州|绍兴|嘉兴|湖州|金华|台州|丽水|衢州|舟山|义乌|慈溪|余姚|萧山|余杭|南京|苏州|无锡|常州|南通|扬州|"
+    r"镇江|徐州|盐城|泰州|昆山|合肥|芜湖|福州|厦门|泉州|南昌|济南|青岛|烟台|郑州|武汉|长沙|广州|深圳|佛山|东莞|珠海|中山|"
+    r"成都|贵阳|昆明|西安|兰州|沈阳|大连|长春|哈尔滨|石家庄|太原|南宁|海口|三亚|乌鲁木齐|呼和浩特|银川|西宁|拉萨)"
+    r"(?:省|市|区|县|自治区|特别行政区)?"
+)
+_RE_COMPANY_SUFFIX = re.compile(r"(?:股份有限公司|有限责任公司|集团有限公司|有限公司|分公司|集团|公司|研究院|设计院|事务所)$")
+_RE_INDUSTRY_SUFFIX = re.compile(
+    r"(?:健康管理|工程管理|项目管理|企业管理|物业管理|资产管理|投资管理|全过程工程咨询|工程咨询|造价咨询|管理咨询|信息技术|"
+    r"勘察设计|建筑设计|房地产开发|供应链|科技|技术|网络|软件|数据|智能|咨询|建设|建筑|工程|设计|勘察|综合|研究|置业|"
+    r"房地产|开发|投资|实业|贸易|商贸|发展|控股|服务|医疗|健康|养老|教育|文化|传媒|环境|环保|能源|电力|电子|机械|制造|"
+    r"材料|物流|建工|路桥|交通|水利|市政|园林|装饰|劳务|安装|机电|电气|消防|管理|国际|股份|"
+    r"康养|医养|养生|医药|药业|生物|食品|农业|旅游|酒店|餐饮|人力资源|城市建设|城建|城投|交投|水务|燃气|热力|通信|"
+    r"新材料|新能源|汽车|光电|化工|钢铁|矿业|港口|航运|安防|检测|测绘|规划|运营|商业|产业|供应|租赁|金融|保险|证券|"
+    r"信息|系统|集成|自动化|电器|仪器|仪表|设备|器材|家具|纺织|服饰|印刷|包装|广告|会展|传播|体育|健身)$"
+)
+
+
+def company_core(name: str) -> str:
+    """公司全称 → 字号（2~4 个汉字）；推不出可靠字号时返回空串。"""
+    s = (name or "").strip()
+    for _ in range(3):
+        s2 = _RE_REGION_PREFIX.sub("", s)
+        if s2 == s:
+            break
+        s = s2
+    prev = None
+    while prev != s:
+        prev = s
+        s = _RE_INDUSTRY_SUFFIX.sub("", _RE_COMPANY_SUFFIX.sub("", s))
+    if not re.fullmatch(r"[一-鿿]{2,4}", s) or s in _NAME_STOP_WORDS:
+        return ""
+    return s
+
+
+def derive_project_stems(findings: "Findings", texts) -> int:
+    """
+    项目名称常常省掉结尾的「项目 / 工程」出现（如「XX未来社区综合体构造柱」），
+    已识别的「XX未来社区综合体项目」去掉结尾后，若在文中确实单独出现过，也一并加入。返回新增条数。
+    """
+    fulls = sorted((it.term for it in findings.items.values() if it.cat == "project"), key=len, reverse=True)
+    if not fulls:
+        return 0
+    strip_full = re.compile("|".join(re.escape(n) for n in fulls))
+    cleaned = [strip_full.sub("〇", t) for t in texts]
+    added = 0
+    for full in fulls:
+        stem = re.sub(r"(?:项目|工程)$", "", full)
+        if stem == full or len(stem) < 6 or not project_specific(stem) or stem in findings.items:
+            continue
+        hits = [t for t in cleaned if stem in t]
+        if not hits:
+            continue
+        for i, t in enumerate(hits[:3]):
+            findings.add(stem, "project", f"项目名称（「{full}」省略结尾）", next(iter(findings.items[full].files), ""), sample=t)
+        findings.items[stem].count = sum(t.count(stem) for t in hits)
+        findings.items[stem].files = set(findings.items[full].files)
+        added += 1
+    return added
+
+
+def derive_short_names(findings: "Findings", texts) -> int:
+    """
+    根据已识别的公司全称推断字号，并在全文里确认它确实被单独使用过
+    （如「云帆112」「20250311云帆 …」「（云帆001～035号）」），再作为企业简称加入。返回新增条数。
+    """
+    full_names = sorted((it.term for it in findings.items.values() if it.cat == "company"), key=len, reverse=True)
+    if not full_names:
+        return 0
+    strip_full = re.compile("|".join(re.escape(n) for n in full_names))
+    cleaned = [strip_full.sub("〇", t) for t in texts]
+    added = 0
+    for full in full_names:
+        core = company_core(full)
+        if not core or core in findings.items:
+            continue
+        ctx = re.compile(
+            rf"(?:(?<![一-鿿]){re.escape(core)}|{re.escape(core)}(?![一-鿿])|"
+            rf"{re.escape(core)}(?=公司|集团|方|号|编号|项目|字第))"
+        )
+        hits = [t for t in cleaned if ctx.search(t)]
+        if not hits:
+            continue
+        n = sum(len(ctx.findall(t)) for t in hits)
+        files = set(findings.items[full].files)
+        for i, t in enumerate(hits):
+            findings.add(core, "company", f"企业简称（由「{full}」推断）", next(iter(files), ""), sample=t if i < 3 else "")
+        findings.items[core].count = n
+        findings.items[core].files = files
+        added += 1
+    return added
+
+
 # ---------------------------------------------------------------------------
 # Detector 主类
 # ---------------------------------------------------------------------------
@@ -433,6 +581,7 @@ class Detector:
         self.whitelist = {w.strip() for w in (cfg.get("whitelist") or []) if w.strip()}
         self.whitelist_lower = {w.lower() for w in self.whitelist}
         self.custom_rules = parse_keywords(cfg.get("keywords") or [])
+        self.seen_texts: dict[str, None] = {}  # 扫描过的文本（去重、保序），用于推断企业简称
 
     def allowed(self, term: str) -> bool:
         t = (term or "").strip()
@@ -462,6 +611,8 @@ class Detector:
 
         results: list[tuple[str, str, str, str]] = []
         seen_local = set()
+        if len(self.seen_texts) < 200000:
+            self.seen_texts[text] = None
 
         def emit(term: str, cat: str, rule: str, custom_rep: str = ""):
             term = (term or "").strip()
@@ -566,6 +717,27 @@ class Detector:
             for m in _RE_EN_COMPANY.finditer(text):
                 emit(m.group(1).strip(), "company", "英文企业后缀")
 
+        # 「XXX（以下简称YYY）」定义的项目 / 单位名称及其简称
+        for m in _RE_ALIAS_DEF.finditer(text):
+            name = _clean_name_prefix(m.group(1).strip())
+            alias = m.group(2).strip()
+            if len(name) < 4:
+                continue
+            if _RE_COMPANY_END.search(name) and self._opt("detect_company"):
+                comp = _clean_cn_company(name)
+                if not comp:
+                    continue
+                emit(comp, "company", "名称定义（以下简称）")
+                cat = "company"
+            elif _RE_PROJECT_END.search(name) and project_specific(name) and self._opt("detect_project"):
+                emit(name, "project", "名称定义（以下简称）")
+                cat = "project"
+            else:
+                continue
+            if (len(alias) >= 2 and alias not in _ALIAS_GENERIC and alias != name
+                    and not re.match(r"[本该我贵此其]", alias) and not re.fullmatch(r"[\d\W_]+", alias)):
+                emit(alias, cat, "名称定义的简称")
+
         if self._opt("detect_address"):
             for m in _RE_ADDRESS.finditer(text):
                 addr = _ADDR_PREFIX_NOISE.sub("", m.group(1).strip()).strip()
@@ -578,6 +750,11 @@ class Detector:
                 amt = m.group(0).strip()
                 amount_terms.add(amt)
                 emit(amt, "amount", "币种金额")
+            for m in _RE_AMOUNT_YUAN.finditer(text):
+                amt = m.group(1)
+                if not any(amt in at for at in amount_terms):
+                    amount_terms.add(amt)
+                    emit(amt, "amount", "金额（元）")
 
         # 5. 行内标签提取（如 联系人：张伟  项目名称：云栖系统升级）
         for lbl_pat, cat, rule_name in _INLINE_LABELS:
@@ -630,6 +807,43 @@ class Detector:
 
         return results
 
+    def detect_kv_cell(self, label: str, cell_text: str) -> list[tuple[str, str, str, str]]:
+        """
+        键值对表格（| 联系人 | 张伟 |）：用左侧单元格当标签。
+        左侧必须像标签（短、不含数字），本格不能本身就是标签（如表头「合同金额（元）」）。
+        """
+        lab = (label or "").strip()
+        val = (cell_text or "").strip()
+        if not lab or not val or len(lab) > 16 or re.search(r"\d", lab):
+            return []
+        if classify_header(val) is not None and not re.search(r"\d", val):
+            return []
+        return self.detect_table_cell(lab, val)
+
+    def detect_cover_lines(self, lines) -> list[tuple[str, str, str, str]]:
+        """
+        文档开头几行（封面 / 标题）里的项目名称，例如：
+          「杭州XX未来社区综合体项目」「XX大厦工程竣工结算审核报告」
+        """
+        if not self._opt("detect_project"):
+            return []
+        out = []
+        seen = set()
+        for raw in lines:
+            t = re.sub(r"^#+\s*", "", (raw or "").strip())
+            if not 6 <= len(t) <= 60 or re.search(r"[，。；！？：:,;!?]", t) or _RE_HEADING_ENUM.match(t):
+                continue
+            m = re.fullmatch(r"(.{4,40}?(?:项目|工程))(?:\s*[（(][^）)]{1,12}[）)])?", t)
+            if not m:
+                m = re.match(r"(.{4,40}?(?:项目|工程))" + _RE_TITLE_TAIL.pattern, t)
+            if not m:
+                continue
+            name = m.group(1).strip()
+            if len(name) >= 8 and project_specific(name) and self.allowed(name) and name not in seen:
+                seen.add(name)
+                out.append((name, "project", "封面标题", ""))
+        return out
+
     def detect_table_cell(self, header: str, cell_text: str) -> list[tuple[str, str, str, str]]:
         """
         结合表头或相邻标签列，对单元格内容做上下文增强识别。
@@ -670,6 +884,10 @@ class Detector:
 
         # 单值单元格按列头上下文精准补充
         if len(val) <= 80 and "\n" not in val:
+            if cat in ("company", "project", "address", "person") and not re.search(r"[\u4e00-\u9fffA-Za-z]", val):
+                return found  # 纯数字不可能是名称（如「桩基工程完成」右边的进度款）
+            if cat == "project" and not project_specific(val):
+                return found  # 「土建总包工程」这类通用专业名称不算项目名
             if cat == "person" and name_like(val):
                 found.append((val, "person", f"表格列「{header.strip()}」", ""))
             elif cat == "company" and len(val) >= 3 and val not in _NAME_STOP_WORDS:

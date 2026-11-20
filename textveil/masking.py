@@ -311,6 +311,26 @@ def build_mapping(findings, cfg: dict, decisions=None, previous=None) -> dict:
     }
 
 
+def term_pattern(term: str) -> str:
+    """
+    单个敏感词的正则。以数字开头 / 结尾的词（金额、编号等）只按完整数字匹配，
+    避免金额「615」误伤「1615号」里的 615。
+    """
+    p = re.escape(term)
+    if re.match(r"[-−]?\d", term):
+        p = r"(?<![\d.,])" + p
+    if re.search(r"\d$", term):
+        p = p + r"(?![\d]|[.,]\d)"
+    return p
+
+
+def term_present(term: str, text: str) -> bool:
+    """脱敏后校验用：按与替换时相同的规则判断原文是否还残留（数字类按完整数字判断）。"""
+    if not term or not text or term not in text:
+        return False
+    return re.search(term_pattern(term), text) is not None
+
+
 def mapping_regex(mapping: dict, only_enabled: bool = True):
     """编译按原文长度降序排列的正则（避免短词抢先截断长词）。"""
     entries = mapping.get("entries", []) if isinstance(mapping, dict) else mapping
@@ -319,7 +339,7 @@ def mapping_regex(mapping: dict, only_enabled: bool = True):
         return None
     # 去重后按长度降序
     uniq = sorted(set(terms), key=len, reverse=True)
-    pattern = "|".join(re.escape(t) for t in uniq)
+    pattern = "|".join(term_pattern(t) for t in uniq)
     return re.compile(pattern)
 
 

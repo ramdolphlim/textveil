@@ -5,7 +5,7 @@ import re
 import openpyxl
 from openpyxl.comments import Comment
 from ..detectors import Detector, Findings, classify_header, name_like
-from ..masking import active_replace_map, mapping_regex
+from ..masking import active_replace_map, mapping_regex, term_present
 from . import ooxml_utils as ox
 
 _EXCEL_XML_PARTS_RE = re.compile(r"^xl/(?:drawings/drawing\d+|charts/chart\d+)\.xml$")
@@ -91,6 +91,12 @@ def scan_file(path: str, det: Detector, findings: Findings, fname: str) -> dict:
             max_r = ws.max_row or 0
             max_c = ws.max_column or 0
 
+            # 表格顶部标题（如合并单元格里的「XX项目工程量清单」）里的项目名称
+            top = [ws.cell(r, c).value for r in range(1, min(max_r, 3) + 1) for c in range(1, min(max_c, 12) + 1)]
+            top = [v for v in top if isinstance(v, str) and v.strip() and not v.startswith("=")]
+            for term, cat, rule, crep in det.detect_cover_lines(top + [ws.title]):
+                findings.add(term, cat, rule, fname, sample=term, custom_replace=crep)
+
             for r in range(1, max_r + 1):
                 for c in range(1, max_c + 1):
                     cell = ws.cell(r, c)
@@ -119,7 +125,7 @@ def scan_file(path: str, det: Detector, findings: Findings, fname: str) -> dict:
                             if col_hdr:
                                 matched.extend(det.detect_table_cell(col_hdr, val))
                             elif left_hdr:
-                                matched.extend(det.detect_table_cell(left_hdr, val))
+                                matched.extend(det.detect_kv_cell(left_hdr, val) or det.detect_text(val))
                             else:
                                 matched.extend(det.detect_text(val))
 
@@ -349,7 +355,7 @@ def verify_file(src_path: str, out_path: str, check_terms: list[str]) -> dict:
 
     _, out_entries = ox.read_zip_entries(out_path)
     full_text = ox.collect_all_xml_text(out_entries, include_rels=True)
-    residual = [t for t in check_terms if t and t in full_text]
+    residual = [t for t in check_terms if term_present(t, full_text)]
     return {
         "structure_ok": True,
         "structure_msg": f"工作簿结构完整（可见表 {src_vis} → {out_vis}，总计 {out_total}）",

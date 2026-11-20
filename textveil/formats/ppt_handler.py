@@ -2,8 +2,8 @@
 
 import re
 import pptx
-from ..detectors import Detector, Findings, name_like
-from ..masking import active_replace_map, mapping_regex
+from ..detectors import Detector, Findings, classify_header, name_like
+from ..masking import active_replace_map, mapping_regex, term_present
 from . import ooxml_utils as ox
 
 _PPT_TEXT_PARTS_RE = re.compile(
@@ -35,15 +35,23 @@ def _scan_ppt_table(rows: list[list[str]], det: Detector, findings: Findings, fn
     if not rows:
         return
     headers = rows[0] if len(rows) >= 2 else []
+    # 首行是不是真正的表头：3 列以上的表格，或两列表格的第二格本身像列名；
+    # 否则多半是 | 联系人 | 张伟 | 这类键值表，首行也是数据
+    real_header = bool(headers) and (len(headers) >= 3 or classify_header(headers[-1]) is not None)
     for r_idx, row in enumerate(rows):
         for c_idx, cell in enumerate(row):
             if not cell.strip():
                 continue
+            # 1) 按首行表头匹配
+            col_cat = None
             if headers and r_idx > 0 and c_idx < len(headers):
+                col_cat = classify_header(headers[c_idx])
                 for term, cat, rule, crep in det.detect_table_cell(headers[c_idx], cell):
                     findings.add(term, cat, rule, fname, sample=cell, custom_replace=crep)
-            if c_idx > 0 and len(row[c_idx - 1].strip()) <= 16:
-                for term, cat, rule, crep in det.detect_table_cell(row[c_idx - 1], cell):
+            # 2) 按左侧相邻标签单元格匹配（键值对表格常见，如 | 联系人 | 张伟 |）；
+            #    表头行、以及列头已经说明了含义的列不再用左侧单元格猜
+            if c_idx > 0 and not (real_header and (r_idx == 0 or col_cat)):
+                for term, cat, rule, crep in det.detect_kv_cell(row[c_idx - 1], cell):
                     findings.add(term, cat, rule, fname, sample=cell, custom_replace=crep)
 
 
@@ -92,7 +100,12 @@ def scan_file(path: str, det: Detector, findings: Findings, fname: str) -> dict:
                     for term, cat, rule, crep in det.detect_text(el.text):
                         findings.add(term, cat, "PPT 批注内容", fname, sample=el.text, custom_replace=crep)
 
-        for a_text in ox.extract_paragraph_texts(data, ox.A_P, ox.A_T):
+        a_texts = ox.extract_paragraph_texts(data, ox.A_P, ox.A_T)
+        if name == "ppt/slides/slide1.xml":
+            # 首页标题里的项目名称
+            for term, cat, rule, crep in det.detect_cover_lines([t for t in a_texts if t.strip()][:8]):
+                findings.add(term, cat, rule, fname, sample=term, custom_replace=crep)
+        for a_text in a_texts:
             all_texts.append(a_text)
             loc_rule = "演讲者备注" if is_notes else "幻灯片文本"
             for term, cat, rule, crep in det.detect_text(a_text):
@@ -189,7 +202,7 @@ def verify_file(src_path: str, out_path: str, check_terms: list[str]) -> dict:
 
     _, out_entries = ox.read_zip_entries(out_path)
     full_text = ox.collect_all_xml_text(out_entries, include_rels=True)
-    residual = [t for t in check_terms if t and t in full_text]
+    residual = [t for t in check_terms if term_present(t, full_text)]
     return {
         "structure_ok": src_slides == out_slides,
         "structure_msg": f"幻灯片结构完整（{out_slides} / {src_slides} 页）",

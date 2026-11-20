@@ -20,5 +20,7 @@ jobs:
         run: python web/build_web.py
       - name: 测试网页版引擎
         run: python tests/test_web_engine.py
+      - name: 报告识别规则测试
+        run: python tests/test_report_rules.py
       - name: 发布到 site 分支
         run: bash web/publish_site.sh

@@ -13,5 +13,7 @@ jobs:
       - run: pip install python-docx openpyxl python-pptx pymupdf lxml pillow
       - name: 全流程回归测试（5 种格式）
         run: python tests/run_tests.py
+      - name: 报告识别规则测试
+        run: python tests/test_report_rules.py
       - name: 网页版引擎测试
         run: python web/build_web.py && python tests/test_web_engine.py

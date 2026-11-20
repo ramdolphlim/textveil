@@ -8,7 +8,7 @@ import re
 import time
 from . import APP_NAME, APP_VERSION, FORMAT_LABELS, SUPPORTED_EXTS
 from .config import CAT_NAMES, merge_config
-from .detectors import Detector, Findings
+from .detectors import Detector, Findings, derive_project_stems, derive_short_names
 from .formats import apply_file, restore_file, scan_file, verify_file
 from .masking import (
     build_inverse_mapping,
@@ -136,6 +136,14 @@ def scan_pipeline(
                 }
             )
 
+    # 项目名称省略「项目 / 工程」结尾的写法
+    if (cfg.get("options") or {}).get("detect_project", True):
+        derive_project_stems(findings, det.seen_texts)
+    # 由公司全称推断字号（如「云帆」），只在文中确实单独出现过时才加入
+    if (cfg.get("options") or {}).get("detect_company", True):
+        n_short = derive_short_names(findings, det.seen_texts)
+        if n_short and log:
+            log(f"✓ 推断出 {n_short} 个企业简称")
     mapping = build_mapping(findings, cfg, previous=previous_mapping)
     elapsed = round(time.time() - t0, 2)
 

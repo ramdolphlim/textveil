@@ -4,7 +4,7 @@ import os
 import re
 import pymupdf
 from ..detectors import Detector, Findings, name_like
-from ..masking import active_replace_map
+from ..masking import active_replace_map, term_pattern, term_present
 
 _CJK_FONT_CANDIDATES = (
     "/System/Library/Fonts/STHeiti Light.ttc",
@@ -117,6 +117,11 @@ def scan_file(path: str, det: Detector, findings: Findings, fname: str) -> dict:
         body_chunks = []
         for i, page in enumerate(doc):
             text = page.get_text("text") or ""
+            if i == 0:
+                # 首页（封面）标题里的项目名称
+                cover = [ln.strip() for ln in text.splitlines() if ln.strip()][:8]
+                for term, cat, rule, crep in det.detect_cover_lines(cover):
+                    findings.add(term, cat, rule, fname, sample=term, custom_replace=crep)
             if len(text.strip()) < 5 and len(page.get_images(full=False)) > 0:
                 scanned_pages.append(i + 1)
 
@@ -206,7 +211,7 @@ def _transform_pdf(
         # 构建替换正则用于书签和超链接
         term_regex = None
         if sorted_terms:
-            term_regex = re.compile("|".join(re.escape(k) for k, _ in sorted_terms))
+            term_regex = re.compile("|".join(term_pattern(k) for k, _ in sorted_terms))
 
         for pno, page in enumerate(doc):
             spans = _collect_page_spans(page)
@@ -372,7 +377,7 @@ def verify_file(src_path: str, out_path: str, check_terms: list[str]) -> dict:
         return {"structure_ok": False, "structure_msg": f"PDF 验证打开失败：{e}", "residual": []}
 
     full_text = "\n".join(chunks)
-    residual = [t for t in check_terms if t and t in full_text]
+    residual = [t for t in check_terms if term_present(t, full_text)]
     return {
         "structure_ok": src_pages == out_pages,
         "structure_msg": f"PDF 页数完整（{out_pages} / {src_pages} 页）",

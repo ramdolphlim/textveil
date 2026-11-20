@@ -19,6 +19,7 @@ jobs:
         with: { python-version: '3.12' }
       - run: pip install python-docx openpyxl python-pptx pymupdf lxml pillow
       - run: python tests/run_tests.py
+      - run: python tests/test_report_rules.py
 
   mac:
     needs: test

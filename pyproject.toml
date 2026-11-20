@@ -1,6 +1,6 @@
 [project]
 name = "textveil"
-version = "1.0.0"
+version = "1.0.1"
 description = "文隐 TextVeil — 本地文档信息脱敏工具（Word / Excel / PPT / PDF / Markdown）"
 requires-python = ">=3.11,<3.15"
 dependencies = [

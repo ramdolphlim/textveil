@@ -2,8 +2,8 @@
 
 import os
 import re
-from ..detectors import Detector, Findings, name_like
-from ..masking import active_replace_map, mapping_regex
+from ..detectors import Detector, Findings, classify_header, name_like
+from ..masking import active_replace_map, mapping_regex, term_present
 
 _RE_FENCE = re.compile(r"^\s*(```+|~~~+)")
 _RE_TABLE_SEP = re.compile(r"^\s*\|?(?:\s*:?-{2,}:?\s*\|)+\s*:?-{2,}:?\s*\|?\s*$")
@@ -56,6 +56,21 @@ def scan_file(path: str, det: Detector, findings: Findings, fname: str) -> dict:
     fence_char = ""
     table_headers: list[str] = []
 
+    # 标题 / 开头几行里的项目名称（frontmatter 里的 title 也算）
+    head = []
+    for i, ln in enumerate(lines):
+        if fm_start <= i <= fm_end:
+            kv = re.match(r"^\s*title\s*:\s*(.+)$", ln, re.I)
+            if kv:
+                head.append(kv.group(1).strip().strip("\"'"))
+            continue
+        if ln.strip() and not _RE_FENCE.match(ln) and "|" not in ln:
+            head.append(ln.strip())
+        if len(head) >= 8:
+            break
+    for term, cat, rule, crep in det.detect_cover_lines(head):
+        findings.add(term, cat, rule, fname, sample=term, custom_replace=crep)
+
     for idx, line in enumerate(lines):
         # 1. YAML Frontmatter
         if fm_start <= idx <= fm_end:
@@ -95,8 +110,9 @@ def scan_file(path: str, det: Detector, findings: Findings, fname: str) -> dict:
                     hdr = table_headers[c_idx] if c_idx < len(table_headers) else ""
                     for term, cat, rule, crep in det.detect_table_cell(hdr, cell):
                         findings.add(term, cat, rule, fname, sample=cell, custom_replace=crep)
-                    if c_idx > 0 and len(cells[c_idx - 1]) <= 16:
-                        for term, cat, rule, crep in det.detect_table_cell(cells[c_idx - 1], cell):
+                    # Markdown 表格一定有表头：列头说明了含义时不再用左侧单元格猜
+                    if c_idx > 0 and not classify_header(hdr):
+                        for term, cat, rule, crep in det.detect_kv_cell(cells[c_idx - 1], cell):
                             findings.add(term, cat, rule, fname, sample=cell, custom_replace=crep)
                 continue
         else:
@@ -196,7 +212,7 @@ def verify_file(src_path: str, out_path: str, check_terms: list[str]) -> dict:
 
     src_lines = len(src_text.splitlines())
     out_lines = len(out_text.splitlines())
-    residual = [t for t in check_terms if t and t in out_text]
+    residual = [t for t in check_terms if term_present(t, out_text)]
     return {
         "structure_ok": src_lines == out_lines,
         "structure_msg": f"文本行数一致（{out_lines} / {src_lines} 行）",
